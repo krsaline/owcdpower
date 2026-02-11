@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OWCD Power — Ocotillo Water Conservation District</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400;1,600&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+/* ── PALETTE from Ocotillo Golf Course photo ── */
+:root {
+  /* Sky / water blues */
+  --sky-pale:   #EDF5FB;      /* lightest sky */
+  --sky-soft:   #C8DFF0;      /* pale reflection */
+  --sky-mid:    #7BB8D8;      /* mid water */
+  --sky-deep:   #3A8DB5;      /* deep water */
+  --sky-dark:   #10506E;      /* darkest water shadow */
+
+  /* Turf greens */
+  --turf:       #2E6B3E;      /* deep grass */
+  --turf-light: #4A9A5A;      /* bright grass */
+  --turf-pale:  #E8F5EC;      /* lightest green tint */
+
+  /* Warm gold / terracotta — buildings & reflections */
+  --gold:       #C49A38;      /* warm gold */
+  --gold-light: #E0BB66;      /* bright gold */
+  --terra:      #8B5C28;      /* terracotta */
+  --sand:       #F5EDDC;      /* sandy pale */
+  --sand-mid:   #E8D9BC;      /* deeper sand */
+
+  /* Neutrals */
+  --white:      #FFFFFF;
+  --off-white:  #F8FBFD;      /* sky-tinted white */
+  --text:       #1A3040;      /* deep water charcoal */
+  --text-mid:   #3A5A6E;      /* mid blue-grey text */
+  --text-soft:  #6A8A9E;      /* soft grey-blue */
+  --border:     #C0D8E8;      /* soft blue border */
+  --border-soft:#DDE8F0;
+}
+
+*{margin:0;padding:0;box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{font-family:'Outfit',sans-serif;background:var(--off-white);color:var(--text);overflow-x:hidden;}
+
+/* ═══════════════════════════════ NAV ═══════════════════════════════ */
+nav{
+  position:fixed;top:0;left:0;right:0;z-index:200;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 2.5rem;height:68px;
+  background:rgba(16,80,110,0.95);
+  backdrop-filter:blur(16px);
+  border-bottom:1px solid rgba(123,184,216,0.2);
+  transition:all 0.3s;
+}
+nav.scrolled{background:rgba(16,80,110,0.99);box-shadow:0 2px 20px rgba(16,80,110,0.25);}
+.nav-brand{display:flex;align-items:center;gap:0.8rem;text-decoration:none;color:#fff;}
+.nav-icon{
+  width:38px;height:38px;border-radius:9px;
+  background:linear-gradient(135deg,var(--sky-mid),var(--turf-light));
+  display:flex;align-items:center;justify-content:center;
+  font-size:17px;box-shadow:0 0 14px rgba(58,141,181,0.4);
+}
+.nav-brand-text .name{font-family:'Playfair Display',serif;font-size:1.05rem;color:#fff;display:block;}
+.nav-brand-text .sub{font-size:0.64rem;color:rgba(200,223,240,0.7);letter-spacing:0.09em;text-transform:uppercase;}
+.nav-links{display:flex;align-items:center;gap:0.1rem;list-style:none;}
+.nav-links a{color:rgba(200,223,240,0.85);text-decoration:none;font-size:0.86rem;font-weight:500;padding:0.4rem 0.85rem;border-radius:6px;transition:all 0.2s;}
+.nav-links a:hover{color:#fff;background:rgba(123,184,216,0.2);}
+.nav-links .btn-nav{
+  background:linear-gradient(135deg,var(--gold),var(--gold-light));
+  color:var(--text) !important;padding:0.48rem 1.1rem;border-radius:7px;font-weight:600;
+  box-shadow:0 2px 10px rgba(196,154,56,0.4);
+}
+.nav-links .btn-nav:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(196,154,56,0.5);}
+
+/* ═══════════════════════════════ HERO ═══════════════════════════════ */
+.hero{position:relative;height:100vh;min-height:640px;overflow:hidden;}
+.slides{position:absolute;inset:0;}
+.slide{position:absolute;inset:0;opacity:0;transition:opacity 1.5s ease;background-size:cover;background-position:center;}
+.slide.active{opacity:1;}
+/* Use the uploaded golf course photo as first slide! */
+.slide-1{background-image:url('static/images/ocotilloplant.jpg');}
+.slide-2{background-image:url('static/images/hoover.jpg');}
+.slide-3{background-image:url('static/images/ocotillo.webp');}
+.slide-4{background-image:url('static/images/bashas.jpg');}
+
+/* Light warm overlay — preserves photo brightness */
+.hero-overlay{
+  position:absolute;inset:0;z-index:1;
+  background:
+    linear-gradient(to right, rgba(16,80,110,0.62) 0%, rgba(16,80,110,0.28) 52%, transparent 100%),
+    linear-gradient(to top,   rgba(16,80,110,0.45) 0%, transparent 38%);
+}
+.hero-content{
+  position:absolute;inset:0;z-index:2;
+  display:flex;flex-direction:column;justify-content:center;
+  padding:0 5rem;padding-top:68px;
+}
+.hero-tag{
+  display:inline-flex;align-items:center;gap:0.5rem;
+  background:rgba(255,255,255,0.18);backdrop-filter:blur(10px);
+  border:1px solid rgba(255,255,255,0.35);
+  color:#fff;font-size:0.76rem;font-weight:600;letter-spacing:0.09em;text-transform:uppercase;
+  padding:0.32rem 0.9rem;border-radius:100px;margin-bottom:1.4rem;width:fit-content;
+  animation:hfu 0.7s ease both;
+}
+.hero h1{
+  font-family:'Playfair Display',serif;
+  font-size:clamp(3rem,5.5vw,5rem);line-height:1.06;color:#fff;
+  margin-bottom:1.3rem;text-shadow:0 2px 20px rgba(16,80,110,0.4);
+  animation:hfu 0.7s 0.12s ease both;
+}
+.hero h1 em{font-style:italic;color:var(--gold-light);}
+.hero-desc{
+  font-size:1.08rem;line-height:1.65;color:rgba(255,255,255,0.88);
+  max-width:500px;margin-bottom:2.4rem;text-shadow:0 1px 8px rgba(16,80,110,0.35);
+  animation:hfu 0.7s 0.22s ease both;
+}
+.hero-btns{display:flex;gap:1rem;flex-wrap:wrap;animation:hfu 0.7s 0.32s ease both;}
+.btn-hero{padding:0.85rem 1.9rem;border-radius:9px;font-weight:600;font-size:0.95rem;font-family:'Outfit',sans-serif;text-decoration:none;transition:all 0.22s;cursor:pointer;border:none;}
+.btn-hero.primary{background:linear-gradient(135deg,var(--gold),var(--gold-light));color:var(--text);box-shadow:0 4px 18px rgba(196,154,56,0.45);}
+.btn-hero.primary:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(196,154,56,0.6);}
+.btn-hero.ghost{background:rgba(255,255,255,0.15);backdrop-filter:blur(10px);color:#fff;border:1.5px solid rgba(255,255,255,0.4);}
+.btn-hero.ghost:hover{background:rgba(255,255,255,0.25);border-color:rgba(255,255,255,0.65);}
+.slide-caption{
+  position:absolute;bottom:5.5rem;right:2rem;z-index:3;
+  background:rgba(255,255,255,0.15);backdrop-filter:blur(10px);
+  border:1px solid rgba(255,255,255,0.25);border-radius:8px;
+  padding:0.5rem 0.9rem;color:rgba(255,255,255,0.85);font-size:0.74rem;max-width:230px;text-align:right;
+}
+.slide-dots{position:absolute;bottom:2rem;left:50%;transform:translateX(-50%);z-index:5;display:flex;gap:0.5rem;}
+.dot{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,0.4);border:none;cursor:pointer;transition:all 0.3s;}
+.dot.active{background:#fff;width:24px;border-radius:4px;}
+.slide-arrow{position:absolute;top:50%;z-index:5;background:rgba(255,255,255,0.15);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.3);color:#fff;width:44px;height:44px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1.1rem;transition:all 0.2s;transform:translateY(-50%);}
+.slide-arrow:hover{background:rgba(255,255,255,0.3);}
+.arrow-prev{left:1.5rem;}.arrow-next{right:1.5rem;}
+
+/* ═══════════════════════════════ QUICK STRIP ═══════════════════════════════ */
+.strip{background:var(--white);border-bottom:1px solid var(--border-soft);box-shadow:0 2px 12px rgba(58,141,181,0.08);}
+.strip-grid{display:grid;grid-template-columns:repeat(4,1fr);}
+.strip-cell{
+  padding:1.5rem 1.8rem;border-right:1px solid var(--border-soft);
+  text-decoration:none;color:var(--text);
+  display:flex;align-items:center;gap:0.9rem;
+  transition:background 0.2s;position:relative;overflow:hidden;
+}
+.strip-cell::after{content:'';position:absolute;bottom:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--sky-deep),var(--turf-light));transform:scaleX(0);transform-origin:left;transition:transform 0.3s;}
+.strip-cell:hover::after{transform:scaleX(1);}
+.strip-cell:last-child{border-right:none;}
+.strip-cell:hover{background:var(--sky-pale);}
+.sc-ico{width:42px;height:42px;border-radius:10px;background:var(--sky-pale);display:flex;align-items:center;justify-content:center;font-size:1.15rem;flex-shrink:0;}
+.sc-text h3{font-size:0.92rem;font-weight:600;color:var(--text);}
+.sc-text p{font-size:0.76rem;color:var(--text-soft);}
+
+/* ═══════════════════════════════ SECTION COMMON ═══════════════════════════════ */
+section{padding:5.5rem 0;}
+.container{max-width:1160px;margin:0 auto;padding:0 2rem;}
+.section-label{font-size:0.72rem;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:var(--sky-deep);margin-bottom:0.5rem;}
+.section-title{font-family:'Playfair Display',serif;font-size:2.5rem;line-height:1.12;color:var(--text);}
+.section-title em{font-style:italic;color:var(--sky-deep);}
+.section-sub{margin-top:0.75rem;color:var(--text-mid);font-size:1rem;line-height:1.65;max-width:560px;}
+
+.reveal{opacity:0;transform:translateY(26px);transition:opacity 0.6s ease,transform 0.6s ease;}
+.reveal.visible{opacity:1;transform:none;}
+.rd1{transition-delay:0.1s;}.rd2{transition-delay:0.2s;}.rd3{transition-delay:0.3s;}
+
+/* ═══════════════════════════════ SERVICE AREA ═══════════════════════════════ */
+.area-section{background:var(--off-white);}
+.area-layout{display:grid;grid-template-columns:1fr 1.3fr;gap:3.5rem;align-items:start;}
+.chips{display:flex;flex-wrap:wrap;gap:0.55rem;margin-top:1.8rem;}
+.chip{
+  display:flex;align-items:center;gap:0.45rem;
+  background:var(--white);border:1.5px solid var(--border);
+  border-radius:100px;padding:0.38rem 1rem;
+  font-size:0.82rem;font-weight:500;color:var(--sky-dark);
+  transition:border-color 0.2s,background 0.2s;
+}
+.chip:hover{background:var(--sky-pale);border-color:var(--sky-deep);}
+.chip::before{content:'◉';font-size:0.55rem;color:var(--sky-deep);opacity:0.7;}
+.energy-row{display:flex;gap:1rem;margin-top:2rem;}
+.ebadge{
+  flex:1;background:var(--white);border:1.5px solid var(--border);
+  border-radius:14px;padding:1.3rem;transition:border-color 0.2s,transform 0.2s;
+}
+.ebadge:hover{border-color:var(--sky-deep);transform:translateY(-2px);}
+.eb-ico{font-size:1.5rem;margin-bottom:0.5rem;}
+.ebadge h4{font-size:0.9rem;font-weight:600;color:var(--text);}
+.ebadge p{font-size:0.78rem;color:var(--text-soft);line-height:1.45;margin-top:0.25rem;}
+
+#district-map{height:430px;border-radius:18px;border:2px solid var(--border);overflow:hidden;box-shadow:0 6px 32px rgba(58,141,181,0.12);}
+.map-cap{margin-top:0.65rem;font-size:0.75rem;color:var(--text-soft);text-align:center;}
+
+/* ═══════════════════════════════ RATES ═══════════════════════════════ */
+.rates-section{background:var(--sky-pale);}
+.rates-section .section-title em{color:var(--turf);}
+.rates-section .section-label{color:var(--turf);}
+.rates-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-top:2.5rem;}
+.rate-card{
+  background:var(--white);border:1.5px solid var(--border);
+  border-radius:18px;padding:2.2rem;position:relative;overflow:hidden;
+  transition:border-color 0.2s,transform 0.2s,box-shadow 0.2s;
+}
+.rate-card:hover{border-color:var(--sky-deep);transform:translateY(-3px);box-shadow:0 8px 32px rgba(58,141,181,0.12);}
+.rate-card::before{content:'';position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,var(--sky-deep),var(--sky-mid));}
+.rate-card.green::before{background:linear-gradient(90deg,var(--turf),var(--turf-light));}
+.rc-icon{width:50px;height:50px;border-radius:12px;background:var(--sky-pale);display:flex;align-items:center;justify-content:center;font-size:1.35rem;margin-bottom:1.2rem;}
+.rate-card.green .rc-icon{background:var(--turf-pale);}
+.rate-card h3{font-family:'Playfair Display',serif;font-size:1.3rem;color:var(--text);}
+.rate-type{font-size:0.73rem;color:var(--text-soft);text-transform:uppercase;letter-spacing:0.07em;margin:0.2rem 0 1.4rem;}
+.rate-rows{display:flex;flex-direction:column;}
+.rrow{display:flex;justify-content:space-between;align-items:center;padding:0.62rem 0;border-bottom:1px solid var(--border-soft);}
+.rrow:last-child{border-bottom:none;}
+.rrow .rl{font-size:0.87rem;color:var(--text-mid);}
+.rrow .rv{font-weight:600;font-size:0.9rem;color:var(--text);font-variant-numeric:tabular-nums;}
+.rtags{display:flex;gap:0.55rem;margin-top:1.3rem;flex-wrap:wrap;}
+.rtag{font-size:0.72rem;font-weight:500;padding:0.22rem 0.65rem;border-radius:100px;background:var(--sky-pale);color:var(--sky-dark);border:1px solid var(--border);}
+.rate-card.green .rtag{background:var(--turf-pale);color:var(--turf);border-color:rgba(46,107,62,0.2);}
+
+.tax-bar{
+  margin-top:1.5rem;background:var(--white);border:1.5px solid var(--border);
+  border-radius:14px;padding:1.8rem;
+}
+.tax-bar h4{font-size:0.76rem;font-weight:600;color:var(--text-soft);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:1.1rem;}
+.tax-pills{display:flex;gap:1rem;}
+.tp{flex:1;background:var(--sky-pale);border:1px solid var(--border);border-radius:10px;padding:1rem;text-align:center;}
+.tp .pct{font-family:'Playfair Display',serif;font-size:1.75rem;color:var(--sky-dark);display:block;}
+.tp .jur{font-size:0.72rem;color:var(--text-soft);text-transform:uppercase;letter-spacing:0.06em;margin-top:0.15rem;}
+
+/* ═══════════════════════════════ CALCULATOR ═══════════════════════════════ */
+.calc-section{background:var(--white);}
+.calc-layout{display:grid;grid-template-columns:1fr 1fr;gap:3rem;align-items:start;}
+.calc-card{
+  background:var(--sky-dark);border-radius:20px;padding:2.4rem;
+  color:#fff;position:relative;overflow:hidden;
+}
+.calc-card::after{
+  content:'';position:absolute;bottom:-80px;right:-80px;
+  width:260px;height:260px;border-radius:50%;
+  background:radial-gradient(circle,rgba(196,154,56,0.15) 0%,transparent 70%);
+  pointer-events:none;
+}
+.calc-card h3{font-family:'Playfair Display',serif;font-size:1.6rem;margin-bottom:0.35rem;}
+.calc-card>p{font-size:0.86rem;color:rgba(200,223,240,0.7);margin-bottom:1.8rem;}
+.cf-label{display:block;font-size:0.74rem;font-weight:600;color:rgba(200,223,240,0.6);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.45rem;}
+.calc-field{margin-bottom:1.1rem;}
+.input-row{display:flex;align-items:center;background:rgba(255,255,255,0.09);border:1px solid rgba(200,223,240,0.2);border-radius:9px;overflow:hidden;}
+.input-row input{flex:1;background:none;border:none;outline:none;padding:0.75rem 1rem;color:#fff;font-size:1rem;font-family:'Outfit',sans-serif;}
+.input-row span{padding:0 1rem;color:rgba(200,223,240,0.4);font-size:0.82rem;font-weight:500;border-left:1px solid rgba(200,223,240,0.12);}
+.calc-sel{width:100%;background:rgba(255,255,255,0.09);border:1px solid rgba(200,223,240,0.2);border-radius:9px;padding:0.75rem 1rem;color:#fff;font-family:'Outfit',sans-serif;font-size:1rem;outline:none;cursor:pointer;}
+.calc-sel option{background:#10506E;}
+.calc-go{width:100%;margin-top:1.4rem;background:linear-gradient(135deg,var(--gold),var(--gold-light));color:var(--text);border:none;cursor:pointer;padding:0.9rem;border-radius:9px;font-size:0.95rem;font-weight:700;font-family:'Outfit',sans-serif;transition:all 0.2s;box-shadow:0 4px 16px rgba(196,154,56,0.3);}
+.calc-go:hover{transform:translateY(-1px);box-shadow:0 6px 22px rgba(196,154,56,0.5);}
+.calc-result{display:none;margin-top:1.5rem;background:rgba(200,223,240,0.1);border:1px solid rgba(200,223,240,0.2);border-radius:12px;padding:1.5rem;text-align:center;}
+.calc-result.show{display:block;}
+.er-label{font-size:0.74rem;color:rgba(200,223,240,0.55);text-transform:uppercase;letter-spacing:0.07em;}
+.er-amount{font-family:'Playfair Display',serif;font-size:2.9rem;color:var(--gold-light);line-height:1.1;margin:0.25rem 0;}
+.er-note{font-size:0.74rem;color:rgba(200,223,240,0.4);}
+.er-breakdown{margin-top:1rem;text-align:left;}
+.er-row{display:flex;justify-content:space-between;font-size:0.82rem;padding:0.3rem 0;border-bottom:1px solid rgba(200,223,240,0.1);color:rgba(200,223,240,0.65);}
+.er-row:last-child{border-bottom:none;font-weight:600;color:#fff;}
+
+.calc-info h3{font-family:'Playfair Display',serif;font-size:2rem;color:var(--text);margin-bottom:1rem;}
+.calc-info p{color:var(--text-mid);line-height:1.7;margin-bottom:1.2rem;font-size:0.97rem;}
+.tips{list-style:none;display:flex;flex-direction:column;gap:0.85rem;}
+.tips li{display:flex;align-items:flex-start;gap:0.85rem;font-size:0.9rem;color:var(--text-mid);line-height:1.55;}
+.tips li::before{content:'◆';color:var(--sky-deep);font-size:0.55rem;margin-top:5px;flex-shrink:0;}
+
+/* ═══════════════════════════════ SOLAR ═══════════════════════════════ */
+.solar-section{background:var(--sky-pale);}
+.solar-layout{display:grid;grid-template-columns:1.1fr 0.9fr;gap:3.5rem;align-items:start;}
+.solar-card{
+  background:var(--sky-dark);border-radius:18px;padding:2.2rem;color:#fff;
+  border:1px solid rgba(123,184,216,0.2);position:relative;overflow:hidden;
+}
+.solar-card::before{content:'☀';position:absolute;right:0.5rem;top:0.5rem;font-size:7rem;opacity:0.05;line-height:1;}
+.solar-card h3{font-family:'Playfair Display',serif;font-size:1.35rem;margin-bottom:0.35rem;}
+.solar-card>p{font-size:0.85rem;color:rgba(200,223,240,0.6);margin-bottom:1.6rem;}
+.ss-steps{display:flex;flex-direction:column;gap:0.85rem;}
+.ss{display:flex;gap:1rem;align-items:flex-start;padding:1rem 1.2rem;background:rgba(255,255,255,0.06);border:1px solid rgba(200,223,240,0.12);border-radius:11px;transition:border-color 0.2s;}
+.ss:hover{border-color:rgba(200,223,240,0.3);}
+.ss-n{width:32px;height:32px;border-radius:7px;flex-shrink:0;background:linear-gradient(135deg,var(--sky-mid),var(--turf-light));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.82rem;color:#fff;}
+.ss-b h4{font-size:0.9rem;font-weight:600;margin-bottom:0.18rem;}
+.ss-b p{font-size:0.79rem;color:rgba(200,223,240,0.5);line-height:1.4;}
+
+.doc-stack{display:flex;flex-direction:column;gap:0.55rem;}
+.doc-row{display:flex;align-items:center;justify-content:space-between;padding:0.85rem 1.1rem;background:var(--white);border:1.5px solid var(--border);border-radius:10px;text-decoration:none;color:var(--text);transition:all 0.2s;}
+.doc-row:hover{border-color:var(--sky-deep);transform:translateX(3px);box-shadow:0 3px 12px rgba(58,141,181,0.1);}
+.doc-left{display:flex;align-items:center;gap:0.7rem;}
+.doc-ico{width:34px;height:34px;border-radius:8px;background:var(--sky-pale);display:flex;align-items:center;justify-content:center;font-size:0.95rem;flex-shrink:0;}
+.doc-name{font-size:0.86rem;font-weight:500;color:var(--text);}
+.doc-ext{font-size:0.7rem;background:var(--sky-pale);padding:0.12rem 0.45rem;border-radius:4px;color:var(--text-soft);}
+.doc-arr{color:var(--sky-deep);font-size:0.85rem;}
+
+.solar-note{margin-top:1.2rem;background:var(--turf-pale);border:1.5px solid rgba(46,107,62,0.2);border-radius:12px;padding:1.2rem 1.4rem;}
+.solar-note .sn-label{font-size:0.74rem;font-weight:600;color:var(--turf);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.4rem;}
+.solar-note p{font-size:0.88rem;color:var(--turf);line-height:1.55;}
+
+/* ═══════════════════════════════ NEW CUSTOMERS ═══════════════════════════════ */
+.nc-section{background:var(--white);}
+.nc-layout{display:grid;grid-template-columns:1fr 1fr;gap:3.5rem;}
+.nc-timeline{position:relative;}
+.nc-timeline::before{content:'';position:absolute;left:22px;top:24px;bottom:24px;width:2px;background:linear-gradient(to bottom,var(--sky-deep),var(--turf-light));opacity:0.25;}
+.nc-step{display:flex;gap:1.4rem;margin-bottom:1.8rem;}
+.nc-num{width:46px;height:46px;border-radius:50%;flex-shrink:0;position:relative;z-index:1;background:linear-gradient(135deg,var(--sky-deep),var(--sky-mid));display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;font-size:0.9rem;box-shadow:0 0 0 4px var(--white),0 0 0 5px rgba(58,141,181,0.25);}
+.nc-c{background:var(--sky-pale);border:1.5px solid var(--border);border-radius:12px;padding:1.2rem 1.4rem;flex:1;transition:border-color 0.2s;}
+.nc-c:hover{border-color:var(--sky-deep);}
+.nc-c h4{font-size:0.97rem;font-weight:600;color:var(--text);}
+.nc-c p{font-size:0.84rem;color:var(--text-mid);line-height:1.55;margin-top:0.28rem;}
+.nc-docs{display:flex;flex-direction:column;gap:1rem;}
+.nc-doc{background:var(--sky-pale);border:1.5px solid var(--border);border-radius:14px;padding:1.7rem;text-decoration:none;color:var(--text);transition:all 0.2s;}
+.nc-doc:hover{border-color:var(--sky-deep);transform:translateY(-2px);box-shadow:0 6px 24px rgba(58,141,181,0.1);}
+.nc-doc-ico{width:44px;height:44px;border-radius:10px;background:var(--white);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:1.1rem;margin-bottom:0.9rem;}
+.nc-doc h4{font-size:0.95rem;font-weight:600;}
+.nc-doc p{font-size:0.82rem;color:var(--text-mid);line-height:1.5;margin-top:0.3rem;}
+.nc-doc .dl{margin-top:1rem;font-size:0.82rem;font-weight:600;color:var(--sky-deep);display:flex;align-items:center;gap:0.35rem;}
+.contact-note{margin-top:1.2rem;background:var(--sand);border:1.5px solid var(--sand-mid);border-radius:12px;padding:1.3rem 1.5rem;}
+.contact-note h4{font-size:0.86rem;font-weight:600;color:var(--terra);margin-bottom:0.4rem;}
+.contact-note p{font-size:0.84rem;color:var(--text-mid);line-height:1.6;}
+
+/* ═══════════════════════════════ OUTAGES ═══════════════════════════════ */
+.outage-section{background:var(--sky-pale);}
+.outage-layout{display:grid;grid-template-columns:1fr 1fr;gap:3rem;align-items:start;}
+.alert-block{margin-top:1.8rem;background:linear-gradient(135deg,#E8641A,#E8A832);border-radius:14px;padding:1.4rem 1.6rem;display:flex;gap:1rem;align-items:flex-start;}
+.alert-block .ai{font-size:1.7rem;flex-shrink:0;}
+.alert-block h4{font-weight:700;color:#fff;margin-bottom:0.2rem;}
+.alert-block p{font-size:0.84rem;color:rgba(255,255,255,0.85);line-height:1.5;}
+.contact-grid{display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;}
+.ct{background:var(--white);border:1.5px solid var(--border);border-radius:13px;padding:1.3rem;text-decoration:none;color:var(--text);transition:all 0.2s;display:flex;flex-direction:column;gap:0.45rem;}
+.ct:hover{border-color:var(--sky-deep);transform:translateY(-2px);box-shadow:0 4px 16px rgba(58,141,181,0.1);}
+.ct-ico{width:42px;height:42px;border-radius:9px;background:var(--sky-pale);display:flex;align-items:center;justify-content:center;font-size:1.1rem;}
+.ct h4{font-size:0.9rem;font-weight:600;color:var(--text);}
+.ct p{font-size:0.77rem;color:var(--text-soft);line-height:1.4;}
+
+/* ═══════════════════════════════ ABOUT ═══════════════════════════════ */
+.about-section{background:var(--off-white);}
+.about-layout{display:grid;grid-template-columns:1.3fr 0.7fr;gap:4rem;align-items:start;}
+.about-text p{color:var(--text-mid);line-height:1.75;margin-bottom:1.1rem;font-size:0.97rem;}
+.about-card{background:var(--white);border:1.5px solid var(--border);border-radius:16px;padding:1.8rem;}
+.about-card h3{font-family:'Playfair Display',serif;font-size:1.1rem;color:var(--text);margin-bottom:1rem;padding-bottom:0.75rem;border-bottom:1px solid var(--border-soft);}
+.fact{display:flex;justify-content:space-between;align-items:center;padding:0.62rem 0;border-bottom:1px solid var(--border-soft);font-size:0.86rem;}
+.fact:last-child{border-bottom:none;}
+.fact .fl{color:var(--text-soft);}
+.fact .fv{font-weight:600;color:var(--text);}
+.staff-card{margin-top:1.2rem;background:var(--sky-dark);border-radius:14px;padding:1.5rem;color:#fff;}
+.staff-card h4{font-size:0.88rem;font-weight:600;color:var(--sky-soft);margin-bottom:0.9rem;text-transform:uppercase;letter-spacing:0.08em;}
+.sl{font-size:0.83rem;color:rgba(200,223,240,0.6);margin-bottom:0.28rem;line-height:1.5;}
+.sl strong{color:#fff;}
+.board-box{margin-top:1.5rem;background:var(--sand);border:1.5px solid var(--sand-mid);border-radius:14px;padding:1.5rem;}
+.board-box h4{font-family:'Playfair Display',serif;font-size:1rem;color:var(--text);margin-bottom:0.9rem;}
+.br{padding:0.5rem 0;border-bottom:1px solid var(--sand-mid);font-size:0.85rem;}
+.br:last-child{border-bottom:none;}
+.br .brl{font-size:0.72rem;color:var(--text-soft);text-transform:uppercase;letter-spacing:0.07em;}
+.br .brn{font-weight:600;color:var(--text);}
+
+/* ═══════════════════════════════ FOOTER ═══════════════════════════════ */
+footer{background:var(--sky-dark);color:rgba(200,223,240,0.55);padding:3.5rem 0 2rem;}
+.fg{display:grid;grid-template-columns:1.6fr 1fr 1fr 1fr;gap:2.5rem;padding-bottom:2.5rem;border-bottom:1px solid rgba(200,223,240,0.1);margin-bottom:1.5rem;}
+.fb .fn{font-family:'Playfair Display',serif;font-size:1.2rem;color:#fff;margin-bottom:0.5rem;}
+.fb .fi{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:8px;background:linear-gradient(135deg,var(--sky-mid),var(--turf-light));font-size:15px;margin-bottom:0.8rem;}
+.fb p{font-size:0.82rem;line-height:1.6;max-width:230px;}
+.fc h5{font-size:0.73rem;font-weight:600;color:rgba(200,223,240,0.3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:1rem;}
+.fl-l{list-style:none;display:flex;flex-direction:column;gap:0.55rem;}
+.fl-l a{color:rgba(200,223,240,0.55);text-decoration:none;font-size:0.86rem;transition:color 0.15s;}
+.fl-l a:hover{color:var(--gold-light);}
+.fb-bottom{display:flex;justify-content:space-between;align-items:center;font-size:0.77rem;}
+.fb-badge{color:rgba(200,223,240,0.3);display:flex;align-items:center;gap:0.4rem;}
+.fb-badge::before{content:'💧';font-size:0.9rem;}
+
+/* ═══════════════════════════════ ANIMATIONS ═══════════════════════════════ */
+@keyframes hfu{from{opacity:0;transform:translateY(20px);}to{opacity:1;transform:none;}}
+
+/* ═══════════════════════════════ RESPONSIVE ═══════════════════════════════ */
+@media(max-width:920px){
+  .area-layout,.calc-layout,.solar-layout,.nc-layout,.outage-layout,.about-layout{grid-template-columns:1fr;}
+  .rates-grid,.contact-grid{grid-template-columns:1fr;}
+  .strip-grid{grid-template-columns:1fr 1fr;}
+  .fg{grid-template-columns:1fr 1fr;}
+  .hero-content{padding:0 2.5rem;padding-top:68px;}
+  .nav-links{display:none;}
+  #district-map{height:300px;}
+  .tax-pills{flex-direction:column;}
+  .energy-row{flex-direction:column;}
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav id="mainNav">
+  <a href="#" class="nav-brand">
+    <div class="nav-icon">💧</div>
+    <div class="nav-brand-text">
+      <span class="name">OWCD Power</span>
+      <span class="sub">Ocotillo Water Conservation District</span>
+    </div>
+  </a>
+  <ul class="nav-links">
+    <li><a href="#service-area">Service Area</a></li>
+    <li><a href="#rates">Rates</a></li>
+    <li><a href="#calculator">Bill Estimator</a></li>
+    <li><a href="#solar">Solar</a></li>
+    <li><a href="#new-customers">New Customers</a></li>
+    <li><a href="#about">About</a></li>
+    <li><a href="#outages" class="btn-nav">Report Outage</a></li>
+  </ul>
+</nav>
+
+<!-- HERO -->
+<section class="hero" id="hero">
+  <div class="slides">
+    <div class="slide slide-1 active"></div>
+    <div class="slide slide-2"></div>
+    <div class="slide slide-3"></div>
+    <div class="slide slide-4"></div>
+  </div>
+  <div class="hero-overlay"></div>
+  <div class="hero-content">
+    <div class="hero-tag">Community-Owned Public Utility · Est. 1968</div>
+    <h1>An <em>Oasis</em> of<br>Reliable Power</h1>
+    <p class="hero-desc">Serving the Ocotillo community, Robson Ranch, Bashas' corporate campus, and the greater Chandler area with clean hydroelectric and solar energy.</p>
+    <div class="hero-btns">
+      <a href="#rates" class="btn-hero primary">View Current Rates</a>
+      <a href="#calculator" class="btn-hero ghost">Estimate My Bill →</a>
+    </div>
+  </div>
+  <div class="slide-caption" id="slideCaption">Ocotillo in Bloom — Chandler</div>
+  <button class="slide-arrow arrow-prev" onclick="changeSlide(-1)">‹</button>
+  <button class="slide-arrow arrow-next" onclick="changeSlide(1)">›</button>
+  <div class="slide-dots" id="slideDots"></div>
+</section>
+
+<!-- QUICK STRIP -->
+<div class="strip">
+  <div class="strip-grid container" style="padding:0 2rem;max-width:100%;">
+    <a href="#rates" class="strip-cell">
+      <div class="sc-ico">⚡</div>
+      <div class="sc-text"><h3>Current Rates</h3><p>Effective May 1, 2024</p></div>
+    </a>
+    <a href="#outages" class="strip-cell">
+      <div class="sc-ico">🌩️</div>
+      <div class="sc-text"><h3>Report Outage</h3><p>24/7 contact available</p></div>
+    </a>
+    <a href="#solar" class="strip-cell">
+      <div class="sc-ico">☀️</div>
+      <div class="sc-text"><h3>Go Solar</h3><p>Interconnection program</p></div>
+    </a>
+    <a href="#new-customers" class="strip-cell">
+      <div class="sc-ico">🏠</div>
+      <div class="sc-text"><h3>Start Service</h3><p>New customer enrollment</p></div>
+    </a>
+  </div>
+</div>
+
+<!-- SERVICE AREA + MAP -->
+<section class="area-section" id="service-area">
+  <div class="container">
+    <div class="area-layout">
+      <div class="reveal">
+        <div class="section-label">Service Territory</div>
+        <h2 class="section-title">Our <em>Community</em></h2>
+        <p class="section-sub">OWCD provides electric service to a growing urban community in southern Maricopa County, including residential neighborhoods, commercial businesses, and irrigation customers.</p>
+        <div class="chips">
+          <span class="chip">Ocotillo District</span>
+          <span class="chip">Robson Community</span>
+          <span class="chip">Bashas' Corporate Office</span>
+          <span class="chip">Snedigar Sportsplex</span>
+          <span class="chip">Ocotillo Golf Resort</span>
+          <span class="chip">Chandler, AZ</span>
+        </div>
+        <div class="energy-row">
+          <div class="ebadge">
+            <div class="eb-ico">💧</div>
+            <h4>Hydroelectric</h4>
+            <p>Clean power from Colorado River generation resources including Hoover Dam</p>
+          </div>
+          <div class="ebadge">
+            <div class="eb-ico">☀️</div>
+            <h4>Solar</h4>
+            <p>Box Canyon solar and customer-owned distributed generation systems</p>
+          </div>
+        </div>
+      </div>
+      <div class="reveal rd1">
+        <div id="district-map"></div>
+        <p class="map-cap">OWCD District — Southern Maricopa County · Chandler, AZ</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- RATES -->
+<section class="rates-section" id="rates">
+  <div class="container">
+    <div class="reveal">
+      <div class="section-label">Transparent Pricing</div>
+      <h2 class="section-title">Electric Service <em>Rates</em></h2>
+      <p class="section-sub">Effective May 1, 2024 — approved by the OWCD Board of Directors. <a href="https://www.owcdpower.org/owcdwp/wp-content/uploads/2024/06/owcd_rate_schedules_050124.pdf" target="_blank" style="color:var(--turf);font-weight:500;">Download rate tariff PDF →</a></p>
+    </div>
+    <div class="rates-grid">
+      <div class="rate-card reveal rd1">
+        <div class="rc-icon">🏠</div>
+        <h3>Residential Service</h3>
+        <div class="rate-type">Overhead &amp; Underground</div>
+        <div class="rate-rows">
+          <div class="rrow"><span class="rl">Basic Service Charge / Month</span><span class="rv">$27.60</span></div>
+          <div class="rrow"><span class="rl">Energy — Overhead</span><span class="rv">$0.0934 / kWh</span></div>
+          <div class="rrow"><span class="rl">Energy — Underground</span><span class="rv">$0.1032 / kWh</span></div>
+          <div class="rrow"><span class="rl">Minimum Bill</span><span class="rv">$27.60 / mo</span></div>
+        </div>
+        <div class="rtags"><span class="rtag">Overhead</span><span class="rtag">Underground</span></div>
+      </div>
+      <div class="rate-card green reveal rd2">
+        <div class="rc-icon">🏢</div>
+        <h3>Non-Residential Service</h3>
+        <div class="rate-type">Commercial &amp; Agricultural — Overhead</div>
+        <div class="rate-rows">
+          <div class="rrow"><span class="rl">Basic Service Charge / Month</span><span class="rv">$60.72</span></div>
+          <div class="rrow"><span class="rl">Demand Charge</span><span class="rv">$8.16 / kW</span></div>
+          <div class="rrow"><span class="rl">Energy Charge</span><span class="rv">$0.0638 / kWh</span></div>
+          <div class="rrow"><span class="rl">Minimum Bill</span><span class="rv">$60.72 / mo</span></div>
+        </div>
+        <div class="rtags"><span class="rtag">Commercial</span><span class="rtag">Agricultural</span></div>
+      </div>
+    </div>
+    <div class="tax-bar reveal" style="margin-top:1.5rem">
+      <h4>Applicable Sales Taxes</h4>
+      <div class="tax-pills">
+        <div class="tp"><span class="pct">5.6%</span><div class="jur">Arizona State</div></div>
+        <div class="tp"><span class="pct">0.7%</span><div class="jur">Maricopa County</div></div>
+        <div class="tp"><span class="pct">2.75%</span><div class="jur">City of Chandler</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- BILL ESTIMATOR -->
+<section class="calc-section" id="calculator">
+  <div class="container">
+    <div class="calc-layout">
+      <div class="calc-card reveal">
+        <h3>Bill Estimator</h3>
+        <p>Estimate your monthly electric bill based on current OWCD rates</p>
+        <div class="calc-field">
+          <label class="cf-label">Customer Type</label>
+          <select class="calc-sel" id="custType" onchange="calcBill()">
+            <option value="res_oh">Residential — Overhead</option>
+            <option value="res_ug">Residential — Underground</option>
+            <option value="com">Non-Residential / Commercial</option>
+          </select>
+        </div>
+        <div class="calc-field">
+          <label class="cf-label">Monthly kWh Usage</label>
+          <div class="input-row">
+            <input type="number" id="kwh" value="800" min="0" oninput="calcBill()">
+            <span>kWh</span>
+          </div>
+        </div>
+        <div class="calc-field" id="demandField" style="display:none">
+          <label class="cf-label">Peak Demand</label>
+          <div class="input-row">
+            <input type="number" id="kw" value="5" min="0" oninput="calcBill()">
+            <span>kW</span>
+          </div>
+        </div>
+        <button class="calc-go" onclick="calcBill()">Calculate My Estimate</button>
+        <div class="calc-result" id="calcResult">
+          <div class="er-label">Estimated Monthly Bill</div>
+          <div class="er-amount" id="estAmount">—</div>
+          <div class="er-note">Includes 9.05% combined sales tax</div>
+          <div class="er-breakdown" id="breakdown"></div>
+        </div>
+      </div>
+      <div class="calc-info reveal rd1">
+        <h3>Understanding Your Bill</h3>
+        <p>Your OWCD electric bill has two components: a fixed monthly service charge and a variable energy charge based on your actual consumption.</p>
+        <p>Non-residential customers also pay a demand charge based on peak 15-minute power draw during the billing period.</p>
+        <ul class="tips">
+          <li>The minimum bill applies even at zero usage — it covers grid infrastructure costs</li>
+          <li>Underground service has a slightly higher energy rate due to installation costs</li>
+          <li>Commercial customers pay a lower energy rate but a demand charge for peak loads</li>
+          <li>Arizona summers typically drive July–September bills 30–50% higher than winter</li>
+          <li>Solar customers can significantly offset energy charges — see our DG program</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SOLAR -->
+<section class="solar-section" id="solar">
+  <div class="container">
+    <div class="solar-layout">
+      <div>
+        <div class="section-label reveal">Renewable Energy</div>
+        <h2 class="section-title reveal">Connect Your <em>Solar</em> System</h2>
+        <p class="section-sub reveal">OWCD welcomes customer-owned distributed solar generation. Systems sized up to 125% of your average load may be interconnected with the OWCD distribution grid.</p>
+        <div class="solar-card reveal" style="margin-top:2rem">
+          <h3>How to Apply</h3>
+          <p>Four steps to get your solar system connected</p>
+          <div class="ss-steps">
+            <div class="ss"><div class="ss-n">1</div><div class="ss-b"><h4>Review DG Guidelines</h4><p>Download and review OWCD's guidelines to ensure your system meets all electrical criteria.</p></div></div>
+            <div class="ss"><div class="ss-n">2</div><div class="ss-b"><h4>Complete the Checklist</h4><p>Verify your design includes appropriate voltage conversion, synchronization, and protection.</p></div></div>
+            <div class="ss"><div class="ss-n">3</div><div class="ss-b"><h4>Submit Application</h4><p>Complete the Solar Application form. Battery storage systems are also supported.</p></div></div>
+            <div class="ss"><div class="ss-n">4</div><div class="ss-b"><h4>Sign Interconnection Agreement</h4><p>Execute the Solar Agreement and Rate Rider to activate your distributed generation.</p></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="reveal rd1">
+        <h3 style="font-family:'Playfair Display',serif;font-size:1.5rem;color:var(--text);margin-bottom:0.4rem;">Required Documents</h3>
+        <p style="color:var(--text-mid);font-size:0.88rem;margin-bottom:1.4rem;">Download all forms to begin your solar application.</p>
+        <div class="doc-stack">
+          <a href="https://www.owcdpower.org/owcdwp/wp-content/uploads/2023/09/OWCD-Guidelines-for-Customer-Owned-DG-Final.pdf" target="_blank" class="doc-row">
+            <div class="doc-left"><div class="doc-ico">📋</div><div><div class="doc-name">DG Guidelines</div><span class="doc-ext">PDF</span></div></div><span class="doc-arr">↗</span>
+          </a>
+          <a href="https://www.owcdpower.org/owcdwp/wp-content/uploads/2023/09/OWCD-Solar-Checklist-Final.pdf" target="_blank" class="doc-row">
+            <div class="doc-left"><div class="doc-ico">✅</div><div><div class="doc-name">Solar Checklist</div><span class="doc-ext">PDF</span></div></div><span class="doc-arr">↗</span>
+          </a>
+          <a href="https://www.owcdpower.org/owcdwp/wp-content/uploads/2023/09/OWCD-Solar-Application-Final.pdf" target="_blank" class="doc-row">
+            <div class="doc-left"><div class="doc-ico">📝</div><div><div class="doc-name">Solar Application</div><span class="doc-ext">PDF</span></div></div><span class="doc-arr">↗</span>
+          </a>
+          <a href="https://www.owcdpower.org/owcdwp/wp-content/uploads/2023/09/OWCD-Solar-Agreement-for-Interconnection-of-Customer-Owned-Distributed-Generation-Final.pdf" target="_blank" class="doc-row">
+            <div class="doc-left"><div class="doc-ico">📄</div><div><div class="doc-name">Interconnection Agreement</div><span class="doc-ext">PDF</span></div></div><span class="doc-arr">↗</span>
+          </a>
+          <a href="https://www.owcdpower.org/owcdwp/wp-content/uploads/2023/09/OWCD-Solar-Rider-Final.pdf" target="_blank" class="doc-row">
+            <div class="doc-left"><div class="doc-ico">⚡</div><div><div class="doc-name">Solar Rate Rider</div><span class="doc-ext">PDF</span></div></div><span class="doc-arr">↗</span>
+          </a>
+        </div>
+        <div class="solar-note">
+          <div class="sn-label">Maximum System Size</div>
+          <p>OWCD accepts solar PV systems up to <strong>125% of your average customer load</strong>. Systems must be on-premises with integral voltage conversion, synchronization, and protection circuitry.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- NEW CUSTOMERS -->
+<section class="nc-section" id="new-customers">
+  <div class="container">
+    <div class="reveal" style="margin-bottom:2.5rem">
+      <div class="section-label">Getting Connected</div>
+      <h2 class="section-title">New Customer <em>Enrollment</em></h2>
+      <p class="section-sub">Starting electric service with OWCD is simple. Follow these steps to get connected.</p>
+    </div>
+    <div class="nc-layout">
+      <div class="nc-timeline reveal">
+        <div class="nc-step"><div class="nc-num">1</div><div class="nc-c"><h4>Review Service Guidelines</h4><p>Download the Electric Service Guidelines to understand metering requirements, equipment standards, and customer responsibilities on the OWCD distribution system.</p></div></div>
+        <div class="nc-step"><div class="nc-num">2</div><div class="nc-c"><h4>Complete the Service Agreement</h4><p>Download and sign the OWCD Electric Service Agreement. This establishes your account and authorizes the District to provide electric service to your premises.</p></div></div>
+        <div class="nc-step"><div class="nc-num">3</div><div class="nc-c"><h4>Contact the District</h4><p>Submit completed forms to District Manager Jeffrey J. Woner at K.R. Saline &amp; Associates, or call (480) 610-8741 to schedule your service connection.</p></div></div>
+        <div class="nc-step"><div class="nc-num">4</div><div class="nc-c"><h4>Service Activation</h4><p>Once documentation and any required deposits are complete, your electric service will be activated. Welcome to OWCD!</p></div></div>
+      </div>
+      <div class="reveal rd1">
+        <div class="nc-docs">
+          <a href="https://www.owcdpower.org/owcdwp/wp-content/uploads/2017/06/OWCD-Electric-Service-Agreement_approved-06-26-2017.pdf" target="_blank" class="nc-doc">
+            <div class="nc-doc-ico">📋</div>
+            <h4>Electric Service Agreement</h4>
+            <p>The official contract between you and OWCD for electric service delivery to your premises.</p>
+            <div class="dl">Download PDF ↗</div>
+          </a>
+          <a href="https://www.owcdpower.org/owcdwp/wp-content/uploads/2017/06/OWCD-Electric-Service-Guidelines_approved-06-26-2017.pdf" target="_blank" class="nc-doc">
+            <div class="nc-doc-ico">📖</div>
+            <h4>Electric Service Guidelines</h4>
+            <p>Complete policies covering equipment standards, safety, metering, and your rights as a customer.</p>
+            <div class="dl">Download PDF ↗</div>
+          </a>
+        </div>
+        <div class="contact-note">
+          <h4>Questions? We're Here.</h4>
+          <p>Contact District Manager Jeffrey J. Woner at <strong>(480) 610-8741</strong> for new service inquiries. K.R. Saline &amp; Associates, PLC · 160 N. Pasadena, Suite 101 · Mesa, AZ 85201.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- OUTAGES -->
+<section class="outage-section" id="outages">
+  <div class="container">
+    <div class="outage-layout">
+      <div class="reveal">
+        <div class="section-label">Emergency Response</div>
+        <h2 class="section-title">Power <em>Outages</em></h2>
+        <p class="section-sub">If you experience an outage or see a safety hazard, contact OWCD immediately. We're committed to restoring service as quickly and safely as possible.</p>
+        <div class="alert-block">
+          <div class="ai">⚠️</div>
+          <div><h4>Safety First</h4><p>Never approach downed power lines. Keep a safe distance, call 911 for immediate hazards, then contact OWCD.</p></div>
+        </div>
+      </div>
+      <div class="contact-grid reveal rd1">
+        <a href="tel:4806108741" class="ct"><div class="ct-ico">📞</div><h4>(480) 610-8741</h4><p>District Manager — Primary outage contact</p></a>
+        <a href="fax:4806108796" class="ct"><div class="ct-ico">📠</div><h4>(480) 610-8796</h4><p>Fax — K.R. Saline &amp; Associates</p></a>
+        <a href="https://maps.google.com/?q=160+N+Pasadena+Mesa+AZ+85201" target="_blank" class="ct" style="grid-column:1/-1"><div class="ct-ico">📍</div><h4>160 N. Pasadena, Suite 101 · Mesa, AZ 85201</h4><p>K.R. Saline &amp; Associates, PLC — District office</p></a>
+        <a href="https://www.owcdpower.org/news/" target="_blank" class="ct" style="grid-column:1/-1"><div class="ct-ico">📢</div><h4>Public Notices Board</h4><p>Official OWCD notices, meeting agendas, and announcements</p></a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ABOUT -->
+<section class="about-section" id="about">
+  <div class="container">
+    <div class="about-layout">
+      <div class="reveal">
+        <div class="section-label">Our District</div>
+        <h2 class="section-title">About <em>OWCD</em></h2>
+        <div class="about-text" style="margin-top:1.5rem">
+          <p>The Ocotillo Water Conservation District (OWCD) was established by order of the Maricopa County, Arizona Board of Supervisors on March 19, 1968. The District is organized under Title 48, Chapter 19 of the Arizona Revised Statutes and operates as a municipal corporation with general statutory powers.</p>
+          <p>Located in southern Maricopa County, the District historically served irrigation pumping loads of agricultural customers farming approximately 5,180 acres. As the Ocotillo area has urbanized — now encompassing the Robson Community, Bashas' Corporate Office, Snedigar Sportsplex, and Ocotillo Golf Resort — the customer mix has shifted toward residential and commercial loads.</p>
+          <p>Power is sourced from a combination of hydroelectric resources (including generation tied to the Colorado River system) and solar energy, reflecting the District's commitment to clean, reliable power in the Arizona desert.</p>
+          <p>OWCD is governed by a three-member Board of Directors, elected at large within the District. Current District staff consists of one part-time District Manager and three part-time employees.</p>
+        </div>
+        <div class="board-box">
+          <h4>Board of Directors</h4>
+          <div class="br"><div class="brl">Composition</div><div class="brn">Three Members, Elected At-Large</div></div>
+          <div class="br" style="border-bottom:none;font-size:0.83rem;color:var(--text-mid);padding-top:0.65rem;">Board elections held pursuant to ARS Title 48, Chapter 19. The Board exercises oversight of District operations, rates, and capital improvements.</div>
+        </div>
+      </div>
+      <div class="reveal rd1">
+        <div class="about-card">
+          <h3>District Quick Facts</h3>
+          <div class="fact"><span class="fl">Established</span><span class="fv">March 19, 1968</span></div>
+          <div class="fact"><span class="fl">Governing Statute</span><span class="fv">ARS Title 48, Ch. 19</span></div>
+          <div class="fact"><span class="fl">County</span><span class="fv">Maricopa</span></div>
+          <div class="fact"><span class="fl">Historical Acreage</span><span class="fv">~5,180 acres</span></div>
+          <div class="fact"><span class="fl">Board Members</span><span class="fv">3, elected at-large</span></div>
+          <div class="fact"><span class="fl">Energy Sources</span><span class="fv">Hydro + Solar</span></div>
+          <div class="fact"><span class="fl">Rate Effective</span><span class="fv">May 1, 2024</span></div>
+        </div>
+        <div class="staff-card">
+          <h4>District Manager</h4>
+          <div class="sl"><strong>Jeffrey J. Woner</strong></div>
+          <div class="sl">K.R. Saline &amp; Associates, PLC</div>
+          <div class="sl">160 N. Pasadena, Suite 101</div>
+          <div class="sl">Mesa, AZ 85201-6764</div>
+          <div class="sl" style="margin-top:0.6rem"><strong>Ph:</strong> (480) 610-8741</div>
+          <div class="sl"><strong>Fax:</strong> (480) 610-8796</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="container">
+    <div class="fg">
+      <div class="fb">
+        <div class="fi">💧</div>
+        <div class="fn">OWCD Power</div>
+        <p>Ocotillo Water Conservation District — community-owned electric utility serving southern Maricopa County since 1968. Clean hydro &amp; solar power.</p>
+      </div>
+      <div class="fc"><h5>Customers</h5><ul class="fl-l"><li><a href="#rates">Rates &amp; Pricing</a></li><li><a href="#calculator">Bill Estimator</a></li><li><a href="#solar">Solar / DG</a></li><li><a href="#new-customers">Start Service</a></li></ul></div>
+      <div class="fc"><h5>District</h5><ul class="fl-l"><li><a href="#about">About OWCD</a></li><li><a href="https://www.owcdpower.org/news/" target="_blank">Public Notices</a></li><li><a href="#outages">Outage Reporting</a></li><li><a href="#service-area">Service Area</a></li></ul></div>
+      <div class="fc"><h5>Contact</h5><ul class="fl-l"><li><a href="tel:4806108741">(480) 610-8741</a></li><li><a href="#">160 N. Pasadena, Ste. 101</a></li><li><a href="#">Mesa, AZ 85201</a></li></ul></div>
+    </div>
+    <div class="fb-bottom">
+      <span>© 2024 Ocotillo Water Conservation District. All rights reserved.</span>
+      <span class="fb-badge">Hydro + Solar Powered</span>
+    </div>
+  </div>
+</footer>
+
+<!-- LEAFLET + SCRIPTS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ── SLIDER ──────────────────────────────────────────────────────
+const captions=['Ocotillo in Bloom — Chandler','Hoover Dam — Colorado River Hydroelectric','Ocotillo Golf Resort — Chandler','Bashas Corporate Office - Chandler'];
+let cur=0;
+const slides=document.querySelectorAll('.slide');
+const capEl=document.getElementById('slideCaption');
+const dotsWrap=document.getElementById('slideDots');
+slides.forEach((_,i)=>{const d=document.createElement('button');d.className='dot'+(i===0?' active':'');d.onclick=()=>go(i);dotsWrap.appendChild(d);});
+function go(n){slides[cur].classList.remove('active');dotsWrap.children[cur].classList.remove('active');cur=(n+slides.length)%slides.length;slides[cur].classList.add('active');dotsWrap.children[cur].classList.add('active');capEl.textContent=captions[cur];}
+function changeSlide(d){go(cur+d);}
+let ap=setInterval(()=>go(cur+1),5800);
+document.querySelector('.hero').addEventListener('mouseenter',()=>clearInterval(ap));
+document.querySelector('.hero').addEventListener('mouseleave',()=>{ap=setInterval(()=>go(cur+1),5800);});
+
+// ── CALCULATOR ──────────────────────────────────────────────────
+function calcBill(){
+  const t=document.getElementById('custType').value;
+  const kwh=parseFloat(document.getElementById('kwh').value)||0;
+  const df=document.getElementById('demandField');
+  const res=document.getElementById('calcResult');
+  const isC=t==='com';
+  df.style.display=isC?'block':'none';
+  const R={res_oh:{base:27.60,energy:0.0934},res_ug:{base:27.60,energy:0.1032},com:{base:60.72,energy:0.0638,demand:8.16}};
+  const r=R[t];
+  const kw=isC?(parseFloat(document.getElementById('kw').value)||0):0;
+  const base=r.base,en=kwh*r.energy,dem=isC?kw*r.demand:0;
+  const sub=Math.max(base,base+en+dem),tax=sub*0.0905,tot=sub+tax;
+  document.getElementById('estAmount').textContent='$'+tot.toFixed(2);
+  let h=`<div class="er-row"><span>Basic Service Charge</span><span>$${base.toFixed(2)}</span></div>
+    <div class="er-row"><span>Energy (${kwh} kWh × $${r.energy})</span><span>$${en.toFixed(2)}</span></div>`;
+  if(isC&&dem>0)h+=`<div class="er-row"><span>Demand (${kw} kW × $${r.demand})</span><span>$${dem.toFixed(2)}</span></div>`;
+  h+=`<div class="er-row"><span>Sales Tax (9.05%)</span><span>$${tax.toFixed(2)}</span></div>
+    <div class="er-row"><span>Estimated Total</span><span>$${tot.toFixed(2)}</span></div>`;
+  document.getElementById('breakdown').innerHTML=h;
+  res.classList.add('show');
+}
+calcBill();
+
+// ── LEAFLET MAP ──────────────────────────────────────────────────
+const LAT=33.24319323726836,LNG=-111.85858587071986;
+const map=L.map('district-map',{center:[LAT,LNG],zoom:13,zoomControl:true,scrollWheelZoom:false});
+L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{attribution:'© OpenStreetMap contributors © CARTO',subdomains:'abcd',maxZoom:19}).addTo(map);
+
+// Custom pin — water-blue tones matching the golf course photo
+const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="40" height="52" viewBox="0 0 40 52">
+  <defs>
+    <linearGradient id="pg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3A8DB5"/>
+      <stop offset="100%" style="stop-color:#10506E"/>
+    </linearGradient>
+    <filter id="sh"><feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="rgba(16,80,110,0.45)"/></filter>
+  </defs>
+  <path d="M20 0C9 0 0 9 0 20c0 15 20 32 20 32S40 35 40 20C40 9 31 0 20 0z" fill="url(#pg)" filter="url(#sh)"/>
+  <circle cx="20" cy="20" r="9" fill="rgba(255,255,255,0.92)"/>
+  <text x="20" y="24" text-anchor="middle" font-size="9" fill="#10506E" font-weight="700" font-family="sans-serif">OWCD</text>
+</svg>`;
+const icon=L.icon({iconUrl:'data:image/svg+xml;base64,'+btoa(svg),iconSize:[40,52],iconAnchor:[20,52],popupAnchor:[0,-54]});
+L.marker([LAT,LNG],{icon}).addTo(map).bindPopup(`
+  <div style="font-family:'Outfit',sans-serif;padding:4px 2px;min-width:190px;">
+    <div style="font-weight:700;font-size:0.95rem;color:#10506E;margin-bottom:5px;">⚡ OWCD District</div>
+    <div style="font-size:0.82rem;color:#3A5A6E;line-height:1.55;">
+      Ocotillo Water Conservation District<br>
+      Chandler · Maricopa County, AZ<br>
+      <span style="color:#3A8DB5;font-weight:600;">Est. March 19, 1968</span>
+    </div>
+  </div>`,{maxWidth:230}).openPopup();
+
+// Service area boundary circle
+L.circle([LAT,LNG],{radius:2200,color:'#3A8DB5',fillColor:'#3A8DB5',fillOpacity:0.06,weight:2,dashArray:'6 4'}).addTo(map);
+
+// ── NAV SCROLL ───────────────────────────────────────────────────
+window.addEventListener('scroll',()=>document.getElementById('mainNav').classList.toggle('scrolled',scrollY>40));
+
+// ── SCROLL REVEAL ────────────────────────────────────────────────
+const io=new IntersectionObserver(e=>e.forEach(x=>{if(x.isIntersecting)x.target.classList.add('visible');}),{threshold:0.08,rootMargin:'0px 0px -50px 0px'});
+document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+</script>
+</body>
+</html>
